@@ -1,36 +1,35 @@
 import Message from "../models/message.models.js";
 import User from "../models/user.models.js";
+import { getReceiverSocketId,io } from "../lib/socket.js";
 
-export const getUsersForSiderbar = async (req, res) => {
+export const getUsersForSidebar = async (req, res) => {
   try {
-    const loggedUserId = req.user._id;
-    const filteredUsers = await User.find({
-      _id: { $ne: loggedUserId },
-    }).select("-password");
+    const loggedInUserId = req.user._id;
+    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
 
     res.status(200).json(filteredUsers);
   } catch (error) {
-    console.log("Error in getUsersForSiderbar controller ", error.message);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Error in getUsersForSidebar: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
 export const getMessages = async (req, res) => {
   try {
     const { id: userToChatId } = req.params;
-    const senderId = req.user._id;
+    const myId = req.user._id;
 
     const messages = await Message.find({
       $or: [
-        { sender: senderId, receiver: userToChatId },
-        { sender: userToChatId, receiver: senderId },
+        { senderId: myId, receiverId: userToChatId },
+        { senderId: userToChatId, receiverId: myId },
       ],
     });
 
     res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getMessages controller ", error.message);
-    return res.status(500).json({ message: "Server error" });
+    console.log("Error in getMessages controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -41,9 +40,10 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
 
     let imageUrl;
-    if(image){
-        const uploadResponse = await cloudinary.uploader.upload(image); // upload image to cloudinary
-        imageUrl = uploadResponse.secure_url;
+    if (image) {
+      // Upload base64 image to cloudinary
+      const uploadResponse = await cloudinary.uploader.upload(image);
+      imageUrl = uploadResponse.secure_url;
     }
 
     const newMessage = new Message({
@@ -52,12 +52,17 @@ export const sendMessage = async (req, res) => {
       text,
       image: imageUrl,
     });
-    await newMessage.save();
-    // realtime functionality goes to socket.io
-    res.status(200).json(newMessage);
 
+    await newMessage.save();
+
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
+
+    res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage controller ", error.message);
-    return res.status(500).json({ message: "Server error  " });
+    console.log("Error in sendMessage controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
