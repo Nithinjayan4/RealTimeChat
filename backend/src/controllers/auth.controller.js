@@ -1,3 +1,4 @@
+import cloudinary from "../lib/cloudinary.js";
 import { generateToken } from "../lib/utils.js";
 import User from "../models/user.models.js";
 import bcrypt from "bcryptjs";
@@ -33,14 +34,12 @@ export const signup = async (req, res) => {
       // generate jwt  token
       generateToken(newUser._id, res); // generate token and set cookie
       await newUser.save();
-      res
-        .status(201)
-        .json({
-          _id: newUser._id,
-          fullName: newUser.fullName,
-          email: newUser.email,
-          profilePic: newUser.profilePic,
-        }); // send response
+      res.status(201).json({
+        _id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        profilePic: newUser.profilePic,
+      }); // send response
     } else {
       return res.status(400).json({ message: "User not created" });
     }
@@ -65,14 +64,12 @@ export const login = async (req, res) => {
     }
     generateToken(user._id, res); // generate token and set cookie
 
-    res
-      .status(200)
-      .json({
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        profilePic: user.profilePic,
-      }); // send response
+    res.status(200).json({
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      profilePic: user.profilePic,
+    }); // send response
   } catch (error) {
     console.log("Error in login controller ", error.message);
     return res.status(500).json({ message: "Server error" });
@@ -80,18 +77,51 @@ export const login = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-  try{
+  try {
     res.cookie("jwt", "", {
       maxAge: 0,
-   
     });
     res.status(200).json({ message: "Logged out success" });
-
-
-
-  }catch(error){
+  } catch (error) {
     console.log("Error in logout controller ", error.message);
     return res.status(500).json({ message: "Server error" });
-
   }
 };
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { profilePic } = req.body;
+    const userId = req.user._id;
+
+    if (!profilePic) {
+      return res
+        .status(400)
+        .json({ message: "Please provide profile picture" });
+    } // check if profile picture is provided
+
+    const uploadResponse = await cloudinary.uploader.upload(profilePic);// upload image to cloudinary
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profilePic: uploadResponse.secure_url },
+      { new: true }
+    );
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    console.log("Error in updateProfile controller ", error.message);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+export const checkAuth =async (req,res)=>{
+
+    try {
+        const user = req.user;
+        res.status(200).json(user);
+    } catch (error) {
+        console.log("Error in checkAuth controller ", error.message);
+        return res.status(500).json({ message: "Server error" });
+    }
+
+}
